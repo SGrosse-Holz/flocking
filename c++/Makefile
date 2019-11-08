@@ -1,3 +1,7 @@
+# This file is distributed under MIT license as part of the project flocksims.
+# See LICENSE file for details.
+# (c) Simon Grosse-Holz, 2019
+
 EXE = flocking
 
 SRC_DIR = src

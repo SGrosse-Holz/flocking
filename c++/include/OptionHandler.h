@@ -1,4 +1,4 @@
-/* This is a small tool for easy command line option handling.
+/* This is a small tool for easy command line option handling, distributed under MIT License
  * For a quick start, copy the following code into your
  * 	int main (int argc, char *argv[]) :
 
@@ -12,6 +12,8 @@ if (res != op::ok) return res;
 
  * This registers an option -i, which takes an integer argument and stores it in the variable istore.
  * Furthermore, the options -h[elp] and -? are always available; they display the help text.
+ *
+ * (c) Simon Grosse-Holz, 2017
  */
 
 #include <map>
