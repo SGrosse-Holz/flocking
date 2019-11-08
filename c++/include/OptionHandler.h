@@ -84,6 +84,17 @@ class OptionHandler
 		const std::string		desc_;
 }; // class OptionHandler
 
+class FlagOption : public Option
+{
+	public:		FlagOption(std::string key, bool& storage)
+				: Option(key, 0), store_(storage) {store_ = false;}
+
+		pRes	proc(char *argv[]) {store_ = true; return ok;}
+
+	private:
+		bool&	store_;
+}; // class FlagOption
+
 template <class value_type>
 class SingleValueOption : public Option
 {

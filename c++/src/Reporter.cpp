@@ -32,29 +32,41 @@ BaseReporter::BaseReporter(std::string filename) : filename(filename), do_report
 	}
 }
 
+HDF5Reporter::savingConformation::savingConformation(const State& state, reportMode toReport)
+	: Conformation(state.conf)
+{
+	t = state.t;
+	this->toReport = toReport;
+
+	// Never report thm, it's useless
+	delete[] thm;
+	thm = 0;
+	if (toReport & reportModes::noParticles)
+	{
+		delete[] x;
+		delete[] y;
+		delete[] thp;
+		
+		x = 0;
+		y = 0;
+		thp = 0;
+	}
+	if (!(toReport & reportModes::noAnalysis))
+	{
+		P = state.calc_polarization();
+		dSdt_discrete = state.calc_dSdt_discrete();
+	}
+	if (!(toReport & reportModes::noTheory))
+	{
+		dSdt_expected = state.calc_dSdt_expected();
+	}
+}
+
 void HDF5Reporter::report(const State& state, reportMode toReport)
 {
 	if (!do_report) return;
 
-	datalist.push_back(state);
-
-	if (toReport & reportModes::noParticles)
-	{
-		delete[] datalist.back().xm;
-		delete[] datalist.back().ym;
-		delete[] datalist.back().xp;
-		delete[] datalist.back().yp;
-		delete[] datalist.back().theta;
-
-		datalist.back().xm = 0;
-		datalist.back().ym = 0;
-		datalist.back().xp = 0;
-		datalist.back().yp = 0;
-		datalist.back().theta = 0;
-	}
-	if (toReport & reportModes::noAnalysis)
-		datalist.back().polarization = -2;
-	
+	datalist.emplace_back(state, toReport);
 }
 
 // The workhorse of the reporter. Aggregates all the data in the data list into
@@ -65,62 +77,73 @@ void HDF5Reporter::dump()
 {
 	if (!do_report) return;
 
-	// Pool all the datasets from the queue in big arrays
+	// Pool all the datasets from the list in big arrays
 	// Note that the particle and analysis variables have their own times
 	// associated with them, because they might be different.
-	// Note: bookkeeping is easier, if we aggregate the particle data, i.e.
-	//       xm, ym, xp, yp, theta in one 3d array. It will still be
-	//       written as 5 named 1d arrays.
+	// Note: bookkeeping is easier if we aggregate the particle data, i.e.
+	//       x, y, thm, thp in one 3d array. It will still be
+	//       written as 3 named 1d arrays.
 	double **particle_data=0, *tps=0;
-	std::string pd_column_names[] = {"x-", "y-", "x+", "y+", "theta"};
-	double *tas=0, *Ss=0, *Ps=0;
+	std::string pd_column_names[] = {"x", "y", "theta+"};
+	double *tas=0, *Ses=0, *Ps=0;
+	double *tts=0, *Sts=0;
 
 	// Get the relevant sizes
-	int Tp=0, Ta=0;
-	for (const auto& state : datalist)
+	int Tp=0, Ta=0, Tt=0;
+	for (const auto& conf : datalist)
 	{
-		if (state.xm && state.ym && state.xp && state.yp && state.theta)
+		if (!(conf.toReport & reportModes::noParticles))
 			Tp++;
-		if (state.polarization > -2)
+		if (!(conf.toReport & reportModes::noAnalysis))
 			Ta++;
+		if (!(conf.toReport & reportModes::noTheory))
+			Tt++;
 	}
 
 	// Allocate memory
 	// Note: make sure that the allocated memory is contiguous, otherwise
 	//       HDF5 will not work
 	int N = datalist.front().N;
-	particle_data = new double*[5];
-	for (int i = 0; i < 5; i++)
+	particle_data = new double*[4];
+	for (int i = 0; i < 3; i++)
 		particle_data[i] = new double[Tp*N];
 	tps = new double[Tp];
 	
 	tas = new double[Ta];
-	Ss = new double[Ta];
+	Ses = new double[Ta];
 	Ps = new double[Ta];
 
-	int ip=0, ia=0;
-	for (const auto& state : datalist)
+	tts = new double[Tt];
+	Sts = new double[Tt];
+
+	int ip=0, ia=0, it=0;
+	for (const auto& conf : datalist)
 	{
-		if (state.xm && state.ym && state.xp && state.yp && state.theta)
+		if (!(conf.toReport & reportModes::noParticles))
 		{
 			for (int in = 0; in < N; in++)
 			{
-				particle_data[0][ip*N + in] = state.xm[in];
-				particle_data[1][ip*N + in] = state.ym[in];
-				particle_data[2][ip*N + in] = state.xp[in];
-				particle_data[3][ip*N + in] = state.yp[in];
-				particle_data[4][ip*N + in] = state.theta[in];
+				particle_data[0][ip*N + in] = conf.x[in];
+				particle_data[1][ip*N + in] = conf.y[in];
+				particle_data[2][ip*N + in] = conf.thp[in];
 			}
-			tps[ip] = state.t;
+			tps[ip] = conf.t;
 			ip++;
 		}
 
-		if (state.polarization > -2)
+		if (!(conf.toReport & reportModes::noAnalysis))
 		{
-			Ss[ia] = state.dS_past;
-			Ps[ia] = state.polarization;
-			tas[ia] = state.t;
+			Ses[ia] = conf.dSdt_discrete;
+			Ps[ia] = conf.P;
+			tas[ia] = conf.t;
 			ia++;
+		}
+
+		if (!(conf.toReport & reportModes::noTheory))
+		{
+			Sts[it] = conf.dSdt_expected;
+			tts[it] = conf.t;
+			it++;
 		}
 	}
 
@@ -141,7 +164,7 @@ void HDF5Reporter::dump()
 	FloatType datatype(PredType::NATIVE_DOUBLE);
 	DataSet dataset;
 
-	for (int i = 0; i < 5; i++)
+	for (int i = 0; i < 3; i++)
 	{
 		dataset = outfile.createDataSet(group_name+"/"+pd_column_names[i], datatype, dataspace);
 		dataset.write(particle_data[i], datatype);
@@ -156,21 +179,32 @@ void HDF5Reporter::dump()
 	dataspace = DataSpace(1, dims);
 	dataset = outfile.createDataSet(group_name+"/t_analysis", datatype, dataspace);
 	dataset.write(tas, datatype);
-	dataset = outfile.createDataSet(group_name+"/dS", datatype, dataspace);
-	dataset.write(Ss, datatype);
-	dataset = outfile.createDataSet(group_name+"/P", datatype, dataspace);
+	dataset = outfile.createDataSet(group_name+"/dSdt_discrete", datatype, dataspace);
+	dataset.write(Ses, datatype);
+	dataset = outfile.createDataSet(group_name+"/P+", datatype, dataspace);
 	dataset.write(Ps, datatype);
+
+	// And the theory stuff
+	dims[0] = (hsize_t)Tt;
+	dataspace = DataSpace(1, dims);
+	dataset = outfile.createDataSet(group_name+"/t_theory", datatype, dataspace);
+	dataset.write(tas, datatype);
+	dataset = outfile.createDataSet(group_name+"/dSdt_expected", datatype, dataspace);
+	dataset.write(Sts, datatype);
 
 	// Clean up
 	outfile.close();
 	delete group;
 
-	for (int i = 0; i < 5; i++)
+	for (int i = 0; i < 3; i++)
 		delete[] particle_data[i];
 	delete[] particle_data;
 	delete[] tps;
 
 	delete[] tas;
-	delete[] Ss;
+	delete[] Ses;
 	delete[] Ps;
+
+	delete[] tts;
+	delete[] Sts;
 }

@@ -10,22 +10,22 @@
 
 namespace flocksims {
 
-class Integrator
+class BaseIntegrator
 {
 	public:
-		Integrator(double T, double J, double d_int, double dt);
+		virtual ~BaseIntegrator() {}
 
+		virtual void step(State& state) = 0;
+};
+
+class LeapFrogIntegrator : public BaseIntegrator
+{
+	public:
 		void	step(State& state);
-		void	step_positions(State& state);
 
 	private:
 		void	step_orientations(State& state);
-
-		const double v0 = 1.0;
-		const double noise_amp;
-		const double J;
-		const double d_int;
-		const double dt;
+		void	step_positions(State& state);
 };
 
 }
