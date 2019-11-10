@@ -20,7 +20,7 @@ class System
 		System(State initial_state, BaseIntegrator *integrator);
 
 		void	step(int n);
-		// const State&	get_state() {return state;}
+		State&	get_state() {return state;}
 		void	report(BaseReporter *reporter, reportMode toReport);
 		void	print();
 

@@ -25,28 +25,16 @@ void LeapFrogIntegrator::step_orientations(State& state)
 	unsigned seed = std::chrono::system_clock::now().time_since_epoch().count();
 	std::default_random_engine generator(seed);
 	angle_distribution<std::normal_distribution<double>> noise_dist(0, sqrt(2*state.T*state.dt));
-	auto noise = std::bind(noise_dist, generator);
 	state.noise_sum = 0.0;
 
-	int iu;
-	double curnoise, *thp = state.conf.thp;
+	double curnoise;
 	for (int i = 0; i < state.conf.N; i++)
 	{
-		thp[i] = 0.0;
-		for (int j = 0; j < i; j++)
-		{
-			iu = j*state.conf.N + i;
-			thp[i] += state.dist_weights[iu]*state.theta_sins[iu];
-		}
-		for (int j = i+1; j < state.conf.N; j++)
-		{
-			iu = i*state.conf.N + j;
-			thp[i] -= state.dist_weights[iu]*state.theta_sins[iu]; // c.f. State.cpp for sign
-		}
-
-		curnoise = noise();
+		curnoise = noise_dist(generator);
 		state.noise_sum += curnoise*curnoise;
-		thp[i] = angle_mod(state.conf.thm[i] - state.dt*state.J*thp[i] + curnoise);
+		state.conf.thp[i] = angle_mod(state.conf.thm[i]
+					    - state.dt*state.J * state.comp_Fterm(i)
+				    	    + curnoise);
 	}
 }
 
@@ -54,14 +42,17 @@ void LeapFrogIntegrator::step_positions(State& state)
 {
 	for(int i = 0; i < state.conf.N; i++)
 	{
-		state.conf.x[i] = mod_positive(state.conf.x[i] + state.v0*state.dt*cos(state.conf.thp[i]), state.conf.box);
-		state.conf.y[i] = mod_positive(state.conf.y[i] + state.v0*state.dt*sin(state.conf.thp[i]), state.conf.box);
+		state.conf.x[i] = mod_positive(state.conf.x[i] + state.v0*state.dt*cos(state.conf.thp[i]),
+					       state.conf.box);
+		state.conf.y[i] = mod_positive(state.conf.y[i] + state.v0*state.dt*sin(state.conf.thp[i]),
+					       state.conf.box);
 	}
 }
 
 void LeapFrogIntegrator::step(State& state)
 {
 	step_positions(state);
+	state.update_pos_distances();
 
 	double *tmp = state.conf.thm;
 	state.conf.thm = state.conf.thp;
@@ -70,7 +61,6 @@ void LeapFrogIntegrator::step(State& state)
 
 	state.t += state.dt;
 
-	state.update_pos_distances();
 	step_orientations(state);
 	state.update_theta_distances();
 }

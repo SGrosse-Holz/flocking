@@ -36,7 +36,8 @@ class State
 	
 	public:
 		// This is the simulation state, so it needs to know some parameters...
-		const double T, J, dt, d_int, v0 = 1.0;
+		const double T, J, d_int, v0 = 1.0;
+		double dt;
 
 		State(const Conformation& conf, double T,
 						double J,
@@ -54,6 +55,11 @@ class State
 		double	calc_dSdt_discrete() const;
 		double	calc_dSdt_expected() const;
 
+		double	comp_Fterm(int i,
+				   double *dist_weights=0,
+				   double *theta_sins=0,
+				   int N=-1) const;
+
 	private:
 		double t;
 		Conformation conf;
@@ -61,8 +67,9 @@ class State
 		double *dist_weights, *theta_sins;
 		double noise_sum;
 
-		void	dpos_matrix(const double *x, const double *y, double *out) const;
-		void	dtheta_matrix(const double *theta, double *out) const;
+		void	dpos_matrix(const double *x, const double *y, double *out,
+				    int N=-1, double box=-1) const;
+		void	dtheta_matrix(const double *theta, double *out, int N=-1) const;
 };
 
 }

@@ -41,6 +41,7 @@ HDF5Reporter::savingConformation::savingConformation(const State& state, reportM
 	// Never report thm, it's useless
 	delete[] thm;
 	thm = 0;
+
 	if (toReport & reportModes::noParticles)
 	{
 		delete[] x;

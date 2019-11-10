@@ -97,11 +97,16 @@ alternating (leapfrog) pattern. Thus the symmetric formulation of a
 	Conformation start_conf(N);
 	start_conf.initialize_randomly();
 	State initial_state(start_conf, T, J, dt, d_int);
-	if (report_states)
-		reporter->report(initial_state, reportModes::noAnalysis | reportModes::noTheory);
 
 	LeapFrogIntegrator integrator;
 	System system(initial_state, &integrator);
+
+	system.get_state().dt = 0.01;
+	system.step(10000);
+	system.get_state().dt = dt;
+
+	if (report_states)
+		reporter->report(system.get_state(), reportModes::noAnalysis | reportModes::noTheory);
 
 	for(int i = 0; i < total_blocks; i++)
 	{

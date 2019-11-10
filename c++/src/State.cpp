@@ -76,7 +76,7 @@ State::State(const Conformation& conf, double T,
 			       	       double dt,
 				       double d_int,
 				       double t)
-	: T(T), J(J), dt(dt), d_int(d_int), t(t), conf(conf), noise_sum(0)
+	: T(T), J(J), d_int(d_int), dt(dt), t(t), conf(conf), noise_sum(0)
 {
 	dist_weights = new double[conf.N*conf.N];
 	theta_sins = new double[conf.N*conf.N];
@@ -102,37 +102,46 @@ State::~State()
 	delete[] theta_sins;
 }
 
-void State::dpos_matrix(const double *x, const double *y, double *out) const
+void State::dpos_matrix(const double *x, const double *y, double *out, int N, double box) const
 {
+	if (N < 0)
+		N = conf.N;
+	if (box < 0)
+		box = conf.box;
+
 	double xtmp, ytmp;
-       	double halfbox = conf.box/2.0;
+       	double halfbox = box/2.0;
 	int il, iu; // linear indices for lower and upper triangular matrix, respectively
-	for(int i = 1; i < conf.N; i++)
+	for(int i = 1; i < N; i++)
 	{
 		for(int j = 0; j < i; j++)
 		{
-			il = i*conf.N + j;
-			iu = j*conf.N + i;
+			il = i*N + j;
+			iu = j*N + i;
 
 			// Get PBC-aware distance and corresponding weights
-			xtmp = fmod(x[i]-x[j] + halfbox, conf.box) - halfbox;
-			ytmp = fmod(y[i]-y[j] + halfbox, conf.box) - halfbox;
+			xtmp = mod_positive(x[i]-x[j] + halfbox, box) - halfbox;
+			ytmp = mod_positive(y[i]-y[j] + halfbox, box) - halfbox;
 			out[il] = sqrt(pow(xtmp, 2) + pow(ytmp, 2));
 			out[iu] = exp(-out[il]/d_int);
 		}
 	}
 }
 
-void State::dtheta_matrix(const double *theta, double *out) const
+void State::dtheta_matrix(const double *theta, double *out, int N) const
 {
+	if (N < 0)
+		N = conf.N;
+
 	int il, iu;
-	for (int i = 1; i < conf.N; i++)
+	for (int i = 1; i < N; i++)
 	{
 		for (int j = 0; j < i; j++)
 		{
-			il = i*conf.N + j;
-			iu = j*conf.N + i;
-			out[il] = theta[i] - theta[j]; // Attention: not in [-pi, pi)! Only use in periodic functions
+			il = i*N + j;
+			iu = j*N + i;
+			out[il] = theta[i] - theta[j]; // Attention: not in [-pi, pi)!
+						       // Only use in periodic functions
 			out[iu] = sin(out[il]);
 		}
 	}
@@ -156,28 +165,43 @@ double State::calc_polarization() const
 		px += cos(conf.thp[i]);
 		py += sin(conf.thp[i]);
 	}
-	return sqrt((px*px + py*py))/conf.N;
+	return sqrt(px*px + py*py)/conf.N;
+}
+
+double State::comp_Fterm(int i, double *dist_weights, double *theta_sins, int N) const
+{
+	if (!dist_weights)
+		dist_weights = this->dist_weights;
+	if (!theta_sins)
+		theta_sins = this->theta_sins;
+	if (N < 0)
+		N = conf.N;
+
+	double Fterm=0.0;
+	int iu;
+
+	Fterm = 0.0;
+	for (int j = 0; j < i; j++)
+	{
+		iu = j*N + i;
+		Fterm += dist_weights[iu]*theta_sins[iu];
+	}
+	for (int j = i+1; j < N; j++)
+	{
+		iu = i*N + j;
+		Fterm -= dist_weights[iu]*theta_sins[iu]; // taking 'wrong' sin, therefore swap sign
+	}
+
+	return Fterm;
 }
 
 double State::calc_dSdt_discrete() const
 {
 	double noise_sum_R = 0.0;
 	double eta;
-	int iu;
 	for (int i = 0; i < conf.N; i++)
 	{
-		eta = 0.0;
-		for (int j = 0; j < i; j++)
-		{
-			iu = j*conf.N + i;
-			eta += dist_weights[iu]*theta_sins[iu];
-		}
-		for (int j = i+1; j < conf.N; j++)
-		{
-			iu = i*conf.N + j;
-			eta -= dist_weights[iu]*theta_sins[iu]; // taking 'wrong' sin, therefore swap sign
-		}
-		eta = angle_mod(conf.thm - conf.thp + dt*J*eta);
+		eta = angle_mod(conf.thm - conf.thp + dt*J*comp_Fterm(i));
 		noise_sum_R += eta*eta;
 	}
 
@@ -195,50 +219,13 @@ double State::calc_dSdt_expected() const
 	delete[] avg_theta;
 	avg_theta = 0;
 
-	double dS = 0.0;
-	double factorj, tmpksum;
-	int iuj, iuk;
+	double F=0.0;
 	for (int i = 0; i < conf.N; i++)
 	{
-		// Always use k < j.
-		// k < j < i
-		// The sum over k is independent from j (except for the upper
-		// bound), so we can compute and store it
-		tmpksum = 0.0;
-		factorj = avg_theta_sins[i]*dist_weights[i];
-		dS += factorj*factorj;
-		for (int j = 1; j < i; j++)
-		{
-			iuj = j*conf.N + i;
-			factorj = avg_theta_sins[iuj]*dist_weights[iuj];
-			iuk = (j-1)*conf.N + i;
-			tmpksum += 2*avg_theta_sins[iuk]*dist_weights[iuk];
-			dS += factorj*(factorj + tmpksum);
-		}
-
-		// i < j
-		// The sum over k up to i is always the same, after that we do
-		// the same as above
-		tmpksum = 0.0;
-		for (int k = 0; k < i; k++)
-		{
-			iuk = k*conf.N + i;
-			tmpksum += 2*avg_theta_sins[iuk]*dist_weights[iuk];
-		}
-		iuj = i*conf.N + i+1;
-		factorj = -avg_theta_sins[iuj]*dist_weights[iuj];
-		dS += factorj*factorj;
-		for (int j = i+2; j < conf.N; j++)
-		{
-			iuj = i*conf.N + j;
-			factorj = -avg_theta_sins[iuj]*dist_weights[iuj]; // again 'wrong' sin
-			iuk = i*conf.N + j-1;
-			tmpksum -= 2*avg_theta_sins[iuk]*dist_weights[iuk]; // again 'wrong' sin
-			dS += factorj*(factorj + tmpksum);
-		}
+		F += comp_Fterm(i, dist_weights, avg_theta_sins);
 	}
 
 	delete[] avg_theta_sins;
 
-	return J*J/T * dS/dt;
+	return J*J/T * F*F;
 }
