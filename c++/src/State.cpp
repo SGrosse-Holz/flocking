@@ -15,7 +15,7 @@
 
 using namespace flocksims;
 
-Conformation::Conformation(int N) : N(N)
+Conformation::Conformation(int N, double density) : N(N), box(sqrt(N/density))
 {
 	x = new double[N];
 	y = new double[N];
@@ -23,7 +23,7 @@ Conformation::Conformation(int N) : N(N)
 	thp = new double[N];
 }
 
-Conformation::Conformation(const Conformation& other) : Conformation(other.N)
+Conformation::Conformation(const Conformation& other) : Conformation(other.N, other.N/(other.box*other.box))
 {
 	for(int i = 0; i < N; i++)
 	{
@@ -60,7 +60,7 @@ void Conformation::initialize_randomly()
 std::string Conformation::as_string()
 {
 	std::stringstream out = std::stringstream();
-	out << "system size: " << N << std::endl;
+	out << "system size: " << N << " birds in a " << box << "x" << box << " box" << std::endl;
 	out << "theta-\tx\ty\ttheta+" << std::endl;
 	for(int i = 0; i < N; i++)
 	{
@@ -75,8 +75,9 @@ State::State(const Conformation& conf, double T,
 	       			       double J,
 			       	       double dt,
 				       double d_int,
+				       double v0,
 				       double t)
-	: T(T), J(J), d_int(d_int), dt(dt), t(t), conf(conf), noise_sum(0)
+	: T(T), J(J), d_int(d_int), v0(v0), dt(dt), t(t), conf(conf), noise_sum(0)
 {
 	dist_weights = new double[conf.N*conf.N];
 	theta_sins = new double[conf.N*conf.N];
@@ -197,11 +198,7 @@ double State::comp_Fterm(int i, double *dist_weights, double *theta_sins, int N)
 
 double State::calc_dSdt_discrete() const
 {
-	// dpos_matrix(conf.x, conf.y, dist_weights);
-
 	double eta;
-	// dtheta_matrix(conf.thp, theta_sins);
-
 	double noise_sum_R = 0.0;
 	for (int i = 0; i < conf.N; i++)
 	{

@@ -17,7 +17,7 @@ namespace flocksims {
 class Conformation
 {
 	public:
-		Conformation(int N);
+		Conformation(int N, double density=1.0);
 		Conformation(const Conformation&);
 		~Conformation();
 
@@ -25,7 +25,7 @@ class Conformation
 		std::string	as_string();
 
 		const int N;
-		const double box = 1.0;
+		const double box;
 		double *x, *y, *thm, *thp;
 };
 
@@ -36,13 +36,14 @@ class State
 	
 	public:
 		// This is the simulation state, so it needs to know some parameters...
-		const double T, J, d_int, v0 = 1.0;
+		const double T, J, d_int, v0;
 		double dt;
 
 		State(const Conformation& conf, double T,
 						double J,
 						double dt,
 						double d_int,
+						double v0,
 						double t = 0.0);
 		State(const State&);
 		~State();

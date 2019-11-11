@@ -22,6 +22,11 @@ namespace reportModes {
 	{
 		return static_cast<reportMode>(static_cast<int>(m1) | static_cast<int>(m2));
 	}
+	template<typename T1, typename T2>
+	inline reportMode operator&(T1 m1, T2 m2)
+	{
+		return static_cast<reportMode>(static_cast<int>(m1) & static_cast<int>(m2));
+	}
 }
 using reportModes::reportMode;
 
@@ -37,7 +42,7 @@ class BaseReporter
 		virtual void report(const State&, reportMode toReport=reportModes::all) = 0; // as individual data set
 
 		// Write actual file
-		virtual void dump() {outfile.close();}
+		virtual void dump() = 0;
 
 	protected:
 		H5::H5File outfile;
@@ -85,10 +90,10 @@ class HDF5Reporter::savingConformation : public Conformation
 template<typename T>
 void BaseReporter::report(const char* name, const T& val, const H5::H5Object *parent)
 {
-	outfile.openFile(filename, H5F_ACC_RDWR);
-
 	if (!do_report) return;
 	if (!parent) parent = &outfile;
+
+	outfile.openFile(filename, H5F_ACC_RDWR);
 
 	H5::DataType datatype = DTfromValue(val);
 	H5::DataSpace dataspace(H5S_SCALAR);
