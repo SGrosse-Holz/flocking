@@ -197,15 +197,19 @@ double State::comp_Fterm(int i, double *dist_weights, double *theta_sins, int N)
 
 double State::calc_dSdt_discrete() const
 {
-	double noise_sum_R = 0.0;
+	// dpos_matrix(conf.x, conf.y, dist_weights);
+
 	double eta;
+	// dtheta_matrix(conf.thp, theta_sins);
+
+	double noise_sum_R = 0.0;
 	for (int i = 0; i < conf.N; i++)
 	{
-		eta = angle_mod(conf.thm - conf.thp + dt*J*comp_Fterm(i));
+		eta = angle_mod(conf.thm[i] - conf.thp[i] + dt*J*comp_Fterm(i));
 		noise_sum_R += eta*eta;
 	}
 
-	return (noise_sum_R - noise_sum) / (4*T*dt);
+	return (noise_sum_R - noise_sum) / (4*T*dt) / dt;
 }
 
 double State::calc_dSdt_expected() const
@@ -219,13 +223,14 @@ double State::calc_dSdt_expected() const
 	delete[] avg_theta;
 	avg_theta = 0;
 
-	double F=0.0;
+	double F=0.0, Fterm;
 	for (int i = 0; i < conf.N; i++)
 	{
-		F += comp_Fterm(i, dist_weights, avg_theta_sins);
+		Fterm = comp_Fterm(i, dist_weights, avg_theta_sins);
+		F += Fterm*Fterm;
 	}
 
 	delete[] avg_theta_sins;
 
-	return J*J/T * F*F;
+	return J*J/T * F;
 }

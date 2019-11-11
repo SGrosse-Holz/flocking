@@ -74,6 +74,11 @@ alternating (leapfrog) pattern. Thus the symmetric formulation of a
 
 	op::pRes res = OH.procOptions(argc, argv);
 	if(res != op::ok) return res;
+
+	// Adaptive timestep
+	// TODO: fix parameters
+	// dt = std::min(1e-2/(J*N), 1e-4/(2*T));
+
 	// Post proc
 	bool report_states = dt_save > 0;
 	dt_save = (dt_save>0) ? dt_save : total_time;
@@ -81,6 +86,9 @@ alternating (leapfrog) pattern. Thus the symmetric formulation of a
 	int analysesPerBlock = ceil(stepsPerBlock/float(analyzeEvery));
 	stepsPerBlock = analysesPerBlock*analyzeEvery;
 	int total_blocks = (int)ceil(total_time/dt_save);
+	// total_blocks = std::max(total_blocks, (int)ceil(100000/stepsPerBlock));
+
+	// std::cout << "Will do " << total_blocks*stepsPerBlock << " steps." << std::endl;
 
 	// Output
 	BaseReporter *reporter;
@@ -101,7 +109,7 @@ alternating (leapfrog) pattern. Thus the symmetric formulation of a
 	LeapFrogIntegrator integrator;
 	System system(initial_state, &integrator);
 
-	system.get_state().dt = 0.01;
+	system.get_state().dt = 1e-4;
 	system.step(10000);
 	system.get_state().dt = dt;
 

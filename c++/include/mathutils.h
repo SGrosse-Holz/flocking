@@ -18,7 +18,7 @@ template<typename T> int sgn(T val)
 	return (T(0) < val) - (val < T(0 ));
 }
 
-inline template<typename T=double>
+template<typename T=double>
 T mod_positive(T val, T by)
 {
 	return val - by*floor(val/by);
@@ -26,22 +26,22 @@ T mod_positive(T val, T by)
 
 // Utilities for dealing with angles
 // Angles are always in [-pi, pi).
-inline template<typename T=double>
+template<typename T=double>
 T angle_mod(T angle)
 {
 	return mod_positive(angle + M_PI, 2*M_PI) - M_PI;
 }
 
-inline template<typename T=double>
+template<typename T=double>
 T angle_diff(T a1, T a2)
 {
 	return angle_mod(a1 - a2);
 }
 
-inline template<typename T=double>
+template<typename T=double>
 T angle_mean(T a1, T a2)
 {
-	return (a1 + a2 + 2*M_PI*mod_positive(a1-a2+M_PI, 2*M_PI))/2;
+	return mod_positive(a1 + (mod_positive(a2-a1+M_PI, 2*M_PI) + M_PI)/2, 2*M_PI) - M_PI;
 }
 
 template<class base_dist>

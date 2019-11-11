@@ -10,6 +10,7 @@
 # include <cmath>
 # include <functional>
 # include <random>
+# include <iostream>
 
 using namespace flocksims;
 
