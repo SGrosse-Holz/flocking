@@ -15,7 +15,13 @@
 namespace flocksims {
 
 namespace reportModes {
-	enum reportMode {all=0, noParticles=1, noAnalysis=1<<1}; // The flags can be combined with bitwise or |
+	enum reportMode {all=0, noParticles=1, noAnalysis=1<<1, noTheory=1<<2}; // The flags can be combined with bitwise or |
+
+	template<typename T1, typename T2>
+	inline reportMode operator|(T1 m1, T2 m2)
+	{
+		return static_cast<reportMode>(static_cast<int>(m1) | static_cast<int>(m2));
+	}
 }
 using reportModes::reportMode;
 
@@ -60,7 +66,17 @@ class HDF5Reporter : public BaseReporter
 		void dump();
 
 	private:
-		std::list<State> datalist;
+		class savingConformation;
+		std::list<savingConformation> datalist;
+};
+
+class HDF5Reporter::savingConformation : public Conformation
+{
+	public:
+		double t, P, dSdt_discrete, dSdt_expected;
+		reportMode toReport;
+
+		savingConformation(const State& state, reportMode toReport);
 };
 
 // template definition has to be in header, such that it is instantiated for

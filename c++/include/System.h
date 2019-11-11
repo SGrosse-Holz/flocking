@@ -10,21 +10,23 @@
 
 # include "State.h"
 # include "Integrator.h"
+# include "Reporter.h"
 
 namespace flocksims {
 
 class System
 {
 	public:
-				System(State initial_state, Integrator integrator);
-		void		step(int n);
-		std::string	state_string();
-		const State&	get_state() {return state;}
-		void		print();
+		System(State initial_state, BaseIntegrator *integrator);
+
+		void	step(int n);
+		State&	get_state() {return state;}
+		void	report(BaseReporter *reporter, reportMode toReport);
+		void	print();
 
 	private:
 		State		state;
-		Integrator	integrator;
+		BaseIntegrator	*integrator;
 };
 
 }

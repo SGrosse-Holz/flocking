@@ -37,6 +37,7 @@ alternating (leapfrog) pattern. Thus the symmetric formulation of a
 
 	int N = 100;
 	int analyzeEvery = 1;
+	bool doTheory = false;
 	double dt = 0.001;
 	double dt_save = 1;
 	double total_time = 10.0;
@@ -47,8 +48,6 @@ alternating (leapfrog) pattern. Thus the symmetric formulation of a
 
 	OH.addOption((new op::SingleValueOption<int>("N", N))->description(
 				"Total number of particles (birds)\n\tdefault: 100"));
-	// OH.addOption((new op::SingleValueOption<int>("spb", stepsPerBlock))->description(
-				// "Simulation steps per block\n\tdefault: 1000"));
 	OH.addOption((new op::SingleValueOption<double>("dt_save", dt_save))->description(
 				"Time step between saving full conformations.\n\t \
 	Set to 0 to never save conformations.\n\t \
@@ -58,8 +57,8 @@ alternating (leapfrog) pattern. Thus the symmetric formulation of a
 	between logging of polarization and\n\t \
 	entropy production.\n\t \
 	default: 10"));
-	// OH.addOption((new op::SingleValueOption<int>("n", total_blocks))->description(
-				// "Total number of blocks\n\tdefault: 10"));
+	OH.addOption((new op::FlagOption("doTheory", doTheory))->description(
+				"If specified, calculate the expected entropy production for each analyzed state."));
 	OH.addOption((new op::SingleValueOption<double>("runtime", total_time))->description(
 				"Total runtime of the simulation.\n\tdefault: 10"));
 	OH.addOption((new op::SingleValueOption<double>("T", T))->description(
@@ -75,6 +74,11 @@ alternating (leapfrog) pattern. Thus the symmetric formulation of a
 
 	op::pRes res = OH.procOptions(argc, argv);
 	if(res != op::ok) return res;
+
+	// Adaptive timestep
+	// TODO: fix parameters
+	// dt = std::min(1e-2/(J*N), 1e-4/(2*T));
+
 	// Post proc
 	bool report_states = dt_save > 0;
 	dt_save = (dt_save>0) ? dt_save : total_time;
@@ -82,37 +86,46 @@ alternating (leapfrog) pattern. Thus the symmetric formulation of a
 	int analysesPerBlock = ceil(stepsPerBlock/float(analyzeEvery));
 	stepsPerBlock = analysesPerBlock*analyzeEvery;
 	int total_blocks = (int)ceil(total_time/dt_save);
+	// total_blocks = std::max(total_blocks, (int)ceil(100000/stepsPerBlock));
+
+	// std::cout << "Will do " << total_blocks*stepsPerBlock << " steps." << std::endl;
 
 	// Output
 	BaseReporter *reporter;
 	reporter = new HDF5Reporter(outfile);
 
 	reporter->report("N", N);
-	reporter->report("stepsPerBlock", stepsPerBlock);
+	reporter->report("total runtime", total_time);
 	reporter->report("T", T);
 	reporter->report("J", J);
 	reporter->report("interaction range", d_int);
 	reporter->report("dt", dt);
 
 	// Simulation
-	State state(N);
-	state.initialize_randomly();
+	Conformation start_conf(N);
+	start_conf.initialize_randomly();
+	State initial_state(start_conf, T, J, dt, d_int);
+
+	LeapFrogIntegrator integrator;
+	System system(initial_state, &integrator);
+
+	system.get_state().dt = 1e-4;
+	system.step(10000);
+	system.get_state().dt = dt;
+
 	if (report_states)
-		reporter->report(state, reportModes::noAnalysis);
-
-	Integrator integrator(T, J, d_int, dt);
-
-	System system(state, integrator);
+		reporter->report(system.get_state(), reportModes::noAnalysis | reportModes::noTheory);
 
 	for(int i = 0; i < total_blocks; i++)
 	{
 		for (int j = 0; j < analysesPerBlock-1; j++)
 		{
 			system.step(analyzeEvery);
-			reporter->report(system.get_state(), reportModes::noParticles);
+			system.report(reporter, reportModes::noParticles | (!doTheory * reportModes::noTheory));
 		}
 		system.step(analyzeEvery);
-		reporter->report(system.get_state(), report_states ? reportModes::all : reportModes::noParticles);
+		system.report(reporter, (report_states ? reportModes::all : reportModes::noParticles)
+				      | (!doTheory * reportModes::noTheory));
 
 		// system.print();
 	}

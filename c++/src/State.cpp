@@ -4,6 +4,7 @@
  */
 
 # include "State.h"
+# include "mathutils.h"
 
 # include <chrono>
 # include <cmath>
@@ -14,77 +15,222 @@
 
 using namespace flocksims;
 
-State::State(int N, double t) : N(N), t(t)
+Conformation::Conformation(int N) : N(N)
 {
-	xp = new double[N];
-	yp = new double[N];
-	xm = new double[N];
-	ym = new double[N];
-	theta = new double[N];
+	x = new double[N];
+	y = new double[N];
+	thm = new double[N];
+	thp = new double[N];
 }
 
-State::State(const State& other) : State(other.N, other.t)
+Conformation::Conformation(const Conformation& other) : Conformation(other.N)
 {
-	polarization = other.polarization;
-	dS_past = other.dS_past;
-
 	for(int i = 0; i < N; i++)
 	{
-		xp[i] = other.xp[i];
-		yp[i] = other.yp[i];
-		xm[i] = other.xm[i];
-		ym[i] = other.ym[i];
-		theta[i] = other.theta[i];
+		x[i] = other.x[i];
+		y[i] = other.y[i];
+		thm[i] = other.thm[i];
+		thp[i] = other.thp[i];
+	}
+}
+
+Conformation::~Conformation()
+{
+	delete[] x;
+	delete[] y;
+	delete[] thm;
+	delete[] thp;
+}
+
+void Conformation::initialize_randomly()
+{
+	unsigned seed = std::chrono::system_clock::now().time_since_epoch().count();
+	std::default_random_engine generator(seed);
+	std::uniform_real_distribution<double> pos_dist(0.0, box);
+	std::uniform_real_distribution<double> ang_dist(-M_PI, M_PI);
+	for(int i = 0; i < N; i++)
+	{
+		x[i] = pos_dist(generator);
+		y[i] = pos_dist(generator);
+		thm[i] = 0;
+		thp[i] = ang_dist(generator);
+	}
+}
+
+std::string Conformation::as_string()
+{
+	std::stringstream out = std::stringstream();
+	out << "system size: " << N << std::endl;
+	out << "theta-\tx\ty\ttheta+" << std::endl;
+	for(int i = 0; i < N; i++)
+	{
+		out << thm[i] << "\t" << x[i] << "\t"
+		    << y[i] << "\t" << thp[i] << std::endl;
+	}
+	return out.str();
+}
+	
+
+State::State(const Conformation& conf, double T,
+	       			       double J,
+			       	       double dt,
+				       double d_int,
+				       double t)
+	: T(T), J(J), d_int(d_int), dt(dt), t(t), conf(conf), noise_sum(0)
+{
+	dist_weights = new double[conf.N*conf.N];
+	theta_sins = new double[conf.N*conf.N];
+
+	update_pos_distances();
+	update_theta_distances();
+}
+
+State::State(const State& other) : State(other.conf, other.T, other.J, other.dt, other.d_int, other.t)
+{
+	noise_sum = other.noise_sum;
+
+	for (int i = 0; i < conf.N*conf.N; i++)
+	{
+		dist_weights[i] = other.dist_weights[i];
+		theta_sins[i] = other.theta_sins[i];
 	}
 }
 
 State::~State()
 {
-	delete[] xp;
-	delete[] yp;
-	delete[] xm;
-	delete[] ym;
-	delete[] theta;
+	delete[] dist_weights;
+	delete[] theta_sins;
 }
 
-// Note: initializes xp, yp, forward_noise to 0, those have to be set by the integrator!
-void State::initialize_randomly()
+void State::dpos_matrix(const double *x, const double *y, double *out, int N, double box) const
 {
-	unsigned seed = std::chrono::system_clock::now().time_since_epoch().count();
-	std::default_random_engine generator(seed);
-	std::uniform_real_distribution<double> pos_dist(0.0, box);
-	std::uniform_real_distribution<double> ang_dist(0.0, 2*M_PI);
-	for(int i = 0; i < N; i++)
+	if (N < 0)
+		N = conf.N;
+	if (box < 0)
+		box = conf.box;
+
+	double xtmp, ytmp;
+       	double halfbox = box/2.0;
+	int il, iu; // linear indices for lower and upper triangular matrix, respectively
+	for(int i = 1; i < N; i++)
 	{
-		xp[i] = 0;
-		yp[i] = 0;
-		xm[i] = pos_dist(generator);
-		ym[i] = pos_dist(generator);
-		theta[i] = ang_dist(generator);
+		for(int j = 0; j < i; j++)
+		{
+			il = i*N + j;
+			iu = j*N + i;
+
+			// Get PBC-aware distance and corresponding weights
+			xtmp = mod_positive(x[i]-x[j] + halfbox, box) - halfbox;
+			ytmp = mod_positive(y[i]-y[j] + halfbox, box) - halfbox;
+			out[il] = sqrt(pow(xtmp, 2) + pow(ytmp, 2));
+			out[iu] = exp(-out[il]/d_int);
+		}
 	}
 }
 
-std::string State::as_string()
+void State::dtheta_matrix(const double *theta, double *out, int N) const
 {
-	std::stringstream out = std::stringstream();
-	out << "system size: " << N << ", t = " << std::setprecision(10) << t << std::endl;
-	out << "x-\ty-\ttheta\tx+\ty+" << std::endl;
-	for(int i = 0; i < N; i++)
+	if (N < 0)
+		N = conf.N;
+
+	int il, iu;
+	for (int i = 1; i < N; i++)
 	{
-		out << xm[i] << "\t" << ym[i] << "\t"
-		    << theta[i] << "\t"
-		    << xp[i] << "\t" << yp[i] << std::endl;
+		for (int j = 0; j < i; j++)
+		{
+			il = i*N + j;
+			iu = j*N + i;
+			out[il] = theta[i] - theta[j]; // Attention: not in [-pi, pi)!
+						       // Only use in periodic functions
+			out[iu] = sin(out[il]);
+		}
 	}
-	return out.str();
+}
+	
+void State::update_pos_distances()
+{
+	dpos_matrix(conf.x, conf.y, dist_weights);
 }
 
-void State::calculate_polarization()
+void State::update_theta_distances()
+{
+	dtheta_matrix(conf.thp, theta_sins);
+}
+
+double State::calc_polarization() const
 {
 	double px=0, py=0;
-	for (int i = 0; i < N; i++)
+	for (int i = 0; i < conf.N; i++)
 	{
-		px += cos(theta[i]);
-		py += sin(theta[i]);
+		px += cos(conf.thp[i]);
+		py += sin(conf.thp[i]);
 	}
-	polarization = sqrt((px*px + py*py))/N;
+	return sqrt(px*px + py*py)/conf.N;
+}
+
+double State::comp_Fterm(int i, double *dist_weights, double *theta_sins, int N) const
+{
+	if (!dist_weights)
+		dist_weights = this->dist_weights;
+	if (!theta_sins)
+		theta_sins = this->theta_sins;
+	if (N < 0)
+		N = conf.N;
+
+	double Fterm=0.0;
+	int iu;
+
+	Fterm = 0.0;
+	for (int j = 0; j < i; j++)
+	{
+		iu = j*N + i;
+		Fterm += dist_weights[iu]*theta_sins[iu];
+	}
+	for (int j = i+1; j < N; j++)
+	{
+		iu = i*N + j;
+		Fterm -= dist_weights[iu]*theta_sins[iu]; // taking 'wrong' sin, therefore swap sign
+	}
+
+	return Fterm;
+}
+
+double State::calc_dSdt_discrete() const
+{
+	// dpos_matrix(conf.x, conf.y, dist_weights);
+
+	double eta;
+	// dtheta_matrix(conf.thp, theta_sins);
+
+	double noise_sum_R = 0.0;
+	for (int i = 0; i < conf.N; i++)
+	{
+		eta = angle_mod(conf.thm[i] - conf.thp[i] + dt*J*comp_Fterm(i));
+		noise_sum_R += eta*eta;
+	}
+
+	return (noise_sum_R - noise_sum) / (4*T*dt) / dt;
+}
+
+double State::calc_dSdt_expected() const
+{
+	double *avg_theta_sins = new double[conf.N*conf.N];
+	double *avg_theta = new double[conf.N];
+	for (int i = 0; i < conf.N; i++)
+		avg_theta[i] = angle_mean(conf.thm[i], conf.thp[i]);
+	dtheta_matrix(avg_theta, avg_theta_sins);
+
+	delete[] avg_theta;
+	avg_theta = 0;
+
+	double F=0.0, Fterm;
+	for (int i = 0; i < conf.N; i++)
+	{
+		Fterm = comp_Fterm(i, dist_weights, avg_theta_sins);
+		F += Fterm*Fterm;
+	}
+
+	delete[] avg_theta_sins;
+
+	return J*J/T * F;
 }
