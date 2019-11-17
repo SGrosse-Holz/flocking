@@ -5,6 +5,7 @@
 
 # include "Integrator.h"
 # include "mathutils.h"
+# include "macros.h"
 
 # include <chrono>
 # include <cmath>
@@ -41,6 +42,12 @@ void LeapFrogIntegrator::step_orientations(State& state)
 
 void LeapFrogIntegrator::step_positions(State& state)
 {
+	//std::cout << "v0 = " << state.v0 << std::endl
+		  //<< "dt = " << state.dt << std::endl
+		  //<< "v0*dt = " << state.dt * state.v0 << std::endl
+		  //<< "box = " << state.conf.box << std::endl
+		  //<< "th0 = " << state.conf.thp[0] << std::endl
+		  //<< std::endl;
 	for(int i = 0; i < state.conf.N; i++)
 	{
 		state.conf.x[i] = mod_positive(state.conf.x[i] + state.v0*state.dt*cos(state.conf.thp[i]),
@@ -52,6 +59,7 @@ void LeapFrogIntegrator::step_positions(State& state)
 
 void LeapFrogIntegrator::step(State& state)
 {
+	DBGOUT("stepping positions...");
 	step_positions(state);
 	state.update_pos_distances();
 
@@ -62,6 +70,7 @@ void LeapFrogIntegrator::step(State& state)
 
 	state.t += state.dt;
 
+	DBGOUT("stepping orientations...");
 	step_orientations(state);
 	state.update_theta_distances();
 }

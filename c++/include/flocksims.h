@@ -10,5 +10,6 @@
 # include "State.h"
 # include "Integrator.h"
 # include "Reporter.h"
+# include "macros.h"
 
 # endif

@@ -4,6 +4,7 @@
  */
 
 # include "Reporter.h"
+# include "macros.h"
 
 # include <fstream>
 # include <iostream>

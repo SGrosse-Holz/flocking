@@ -22,6 +22,7 @@ class Conformation
 		~Conformation();
 
 		void 		initialize_randomly();
+		void		initialize_hbd(std::string file = "res/hbd.pos");
 		std::string	as_string();
 
 		const int N;

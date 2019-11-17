@@ -8,6 +8,7 @@
 
 # include <chrono>
 # include <cmath>
+# include <fstream>
 # include <iomanip>
 # include <iostream>
 # include <random>
@@ -57,6 +58,35 @@ void Conformation::initialize_randomly()
 	}
 }
 
+void Conformation::initialize_hbd(std::string file)
+{
+	std::ifstream ifile(file);
+	if (!ifile.is_open())
+		throw "Couldn't read file: "+file;
+
+	std::string line;
+	int i = 0;
+	while (ifile >> line && i < N)
+	{
+		sscanf(line.c_str(), "%lf,%lf", x+i, y+i);
+		i++;
+	}
+
+	if (i < N-1)
+		throw "Didn't find enough positions in hbd file!";
+	if (!ifile.eof())
+		throw "There's positions left in the file!";
+
+	unsigned seed = std::chrono::system_clock::now().time_since_epoch().count();
+	std::default_random_engine generator(seed);
+	std::uniform_real_distribution<double> ang_dist(-M_PI, M_PI);
+	for (int j = 0; j < N; j++)
+	{
+		thm[j] = 0;
+		thp[j] = ang_dist(generator);
+	}
+}
+
 std::string Conformation::as_string()
 {
 	std::stringstream out = std::stringstream();
@@ -86,7 +116,7 @@ State::State(const Conformation& conf, double T,
 	update_theta_distances();
 }
 
-State::State(const State& other) : State(other.conf, other.T, other.J, other.dt, other.d_int, other.t)
+State::State(const State& other) : State(other.conf, other.T, other.J, other.dt, other.d_int, other.v0, other.t)
 {
 	noise_sum = other.noise_sum;
 

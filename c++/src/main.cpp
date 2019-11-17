@@ -41,6 +41,7 @@ alternating (leapfrog) pattern. Thus the symmetric formulation of a
 	int nsteps_max = 0;
 	bool doTheory = false;
 	bool report_states = false;
+	bool hbd = false;
 	double v0 = 1.0;
 	double density = 1;
 	double dt = 0.001;
@@ -75,6 +76,8 @@ alternating (leapfrog) pattern. Thus the symmetric formulation of a
 				"If specified, calculate the expected entropy production for each analyzed state."));
 	OH.addOption((new op::FlagOption("reportStates", report_states))->description(
 				"If set, write some states out with the data. c.f. dt_save."));
+	OH.addOption((new op::FlagOption("hbd", hbd))->description(
+				"Start from hbd config, instead of randomly"));
 	OH.addOption((new op::SingleValueOption<double>("runtime", total_time))->description(
 				"Total runtime of the simulation.\n\tdefault: 10"));
 	OH.addOption((new op::SingleValueOption<double>("T", T))->description(
@@ -127,9 +130,24 @@ alternating (leapfrog) pattern. Thus the symmetric formulation of a
 	reporter->report("v0", v0);
 
 	// Simulation
+	DBGOUT("initializing...");
 	Conformation start_conf(N, density);
-	start_conf.initialize_randomly();
+	if (hbd)
+	{
+		try
+		{
+			start_conf.initialize_hbd();
+		}
+		catch (const char* msg)
+		{
+			std::cout << msg << std::endl;
+			return 1;
+		}
+	}
+	else
+		start_conf.initialize_randomly();
 	State initial_state(start_conf, T, J, dt, d_int, v0);
+	DBGOUT("finished initializing");
 
 	LeapFrogIntegrator integrator;
 	System system(initial_state, &integrator);
@@ -141,13 +159,16 @@ alternating (leapfrog) pattern. Thus the symmetric formulation of a
 	if (report_states)
 		reporter->report(system.get_state(), reportModes::noAnalysis | reportModes::noTheory);
 
+	DBGOUT("starting run...");
 	for(int i = 0; i < total_blocks; i++)
 	{
 		for (int j = 0; j < analysesPerBlock-1; j++)
 		{
+			DBGOUT("stepping...");
 			system.step(analyzeEvery);
 			system.report(reporter, reportModes::noParticles | (!doTheory * reportModes::noTheory));
 		}
+		DBGOUT("stepping...");
 		system.step(analyzeEvery);
 		system.report(reporter, (report_states ? reportModes::all : reportModes::noParticles)
 				      | (!doTheory * reportModes::noTheory));
