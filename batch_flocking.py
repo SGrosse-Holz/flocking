@@ -14,18 +14,18 @@ def flocking(args):
     T = args[0]
     J = args[1]
     rep = args[2]
-    base_folder = '/net/levsha/share/simongh/sims/flocking/better_sweep'
+    base_folder = '/net/levsha/share/simongh/sims/flocking/sweep_Jordan'
     # base_folder = '/home/simongh/simulations/flocking/dense_sweep_dt0.00001'
     filename = os.path.join(base_folder, '{2}_T={0}_J={1}.h5'.format(T, J, rep))
-    cmd = './c++/flocking -N 1024 -o {2} -dt 1e-6 -v0 1e3 -doTheory -ae 1000 -runtime 10 -T {0} -J {1}'.format(T, J, filename)
+    cmd = './c++/flocking -N 128 -o {2} -dt 1e-4 -v0 0.088 -doTheory -ae 1000 -runtime 500 -T {0} -J {1}'.format(T, J, filename)
     os.system(cmd)
 
 if __name__ == '__main__':
-    Ts = np.logspace(-3, 3, 30);
-    Js = np.logspace(-3, 3, 30);
-    rep = 1800;
+    Ts = np.logspace(-3, 2, 50);
+    Js = np.array([1]);#np.logspace(-3, 3, 30);
+    rep = 0;
     paramlist = []
-    for i in range(2):
+    for i in range(15):
         for T in Ts:
             for J in Js:
                 paramlist.append((T, J, rep))
