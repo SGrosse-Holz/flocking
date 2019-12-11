@@ -153,7 +153,7 @@ alternating (leapfrog) pattern. Thus the symmetric formulation of a
 	System system(initial_state, &integrator);
 
 	// system.get_state().dt = 1e-4;
-	system.step(1000000);
+	system.step(10000000);
 	// system.get_state().dt = dt;
 
 	if (report_states)
